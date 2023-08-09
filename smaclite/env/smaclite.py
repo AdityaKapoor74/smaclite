@@ -175,12 +175,37 @@ class SMACliteEnv(gym.Env):
                 raise ValueError(f"Invalid action for agent {i}: {action}")
             agent.command = self.__get_command(agent, action)
         reward = sum(self.__world_step() for _ in range(STEP_MUL))
+
         all_enemies_dead = len(self.enemies) == 0
         if all_enemies_dead:
             reward += 200
         done = all_enemies_dead or len(self.agents) == 0
         reward /= self.max_reward / 20  # Scale reward between 0 and 20
-        return self.__get_obs(), reward, done, self.__get_info()
+
+        indiv_rewards = []
+        for i in range(len(actions)):
+            if i in self.agents:
+                agent = self.agents[i]
+                if agent.max_shield != 0:
+                    shield_rew = agent.shield / agent.max_shield / 20
+                else:
+                    shield_rew = 0
+                if agent.max_hp != 0:
+                    hp_rew = agent.hp / agent.max_hp / 20
+                else:
+                    hp_rew = 0
+                if agent.max_energy != 0:
+                    energy_rew = agent.energy / agent.max_energy / 20
+                else:
+                    energy_rew = 0
+                indiv_rewards.append(reward + shield_rew + hp_rew + energy_rew)
+            else:
+                indiv_rewards.append(0)
+
+        info = self.__get_info()
+        info["indiv_rewards"] = indiv_rewards
+
+        return self.__get_obs(), reward, done, info
 
     def render(self, mode='human'):
         if mode == 'human':
@@ -296,12 +321,12 @@ class SMACliteEnv(gym.Env):
         reward = sum(unit.game_step(
             neighbour_finder=self.__get_targeter_neighbour_finder(unit),
             max_radius=self.max_unit_radius
-            )
-                     for unit in shuffled_units)
+            ) for unit in shuffled_units)
         self.__update_deaths()
         self.neighbour_finder_all.update()
         self.neighbour_finder_ally.update()
         self.neighbour_finder_enemy.update()
+
         return reward
 
     def __get_unit_state_features(self, unit: Unit, ally: bool):
