@@ -205,8 +205,8 @@ class SMACliteEnv(gym.Env):
 
         info = self.__get_info()
         info["indiv_rewards"] = indiv_rewards
-        info["num_enemies_dead"] = len(self.enemies)
-        info["num_allies_dead"] = len(self.agents)
+        info["num_enemies"] = len(self.enemies)
+        info["num_allies"] = len(self.agents)
         info["all_enemies_dead"] = int(all_enemies_dead)
         info["all_allies_dead"] = int(len(self.agents) == 0)
 
