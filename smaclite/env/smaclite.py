@@ -187,23 +187,28 @@ class SMACliteEnv(gym.Env):
             if i in self.agents:
                 agent = self.agents[i]
                 if agent.max_shield != 0:
-                    shield_rew = agent.shield / agent.max_shield / 20
+                    shield_rew = (agent.shield / agent.max_shield) * 0.05
                 else:
                     shield_rew = 0
                 if agent.max_hp != 0:
-                    hp_rew = agent.hp / agent.max_hp / 20
+                    hp_rew = (agent.hp / agent.max_hp) * 0.05
                 else:
                     hp_rew = 0
                 if agent.max_energy != 0:
-                    energy_rew = agent.energy / agent.max_energy / 20
+                    energy_rew = (agent.energy / agent.max_energy) * 0.05
                 else:
                     energy_rew = 0
+                # print(shield_rew, hp_rew, energy_rew)
                 indiv_rewards.append(reward + shield_rew + hp_rew + energy_rew)
             else:
                 indiv_rewards.append(0)
 
         info = self.__get_info()
         info["indiv_rewards"] = indiv_rewards
+        info["num_enemies_dead"] = len(self.enemies)
+        info["num_allies_dead"] = len(self.agents)
+        info["all_enemies_dead"] = int(all_enemies_dead)
+        info["all_allies_dead"] = int(len(self.agents) == 0)
 
         return self.__get_obs(), reward, done, info
 
