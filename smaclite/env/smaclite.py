@@ -154,6 +154,7 @@ class SMACliteEnv(gym.Env):
         self.max_reward = self.n_enemies * REWARD_KILL + REWARD_WIN \
             + sum(enemy.hp + enemy.shield
                   for enemy in self.enemies.values())
+
         self.__enemy_attack()
         obs = self.__get_obs()
         if return_info:
@@ -174,34 +175,57 @@ class SMACliteEnv(gym.Env):
             if not avail_actions[i][action]:
                 raise ValueError(f"Invalid action for agent {i}: {action}")
             agent.command = self.__get_command(agent, action)
-        reward = sum(self.__world_step() for _ in range(STEP_MUL))
+        # reward = sum(self.__world_step() for _ in range(STEP_MUL))
+
+        # PRD CODE
+        reward = 0
+        indiv_rewards = {}
+        for i in range(self.n_agents):
+            indiv_rewards[i] = 0
+        for _ in range(STEP_MUL):
+            r, d = self.__world_step()
+            reward += r
+            for d_key, d_value in d.items():
+                if d_key in indiv_rewards:
+                    indiv_rewards[d_key] += d_value
+        
+        # print(self.agents.keys())
+        # print(sum(indiv_rewards.values()) == reward)
+        indiv_rewards = list(indiv_rewards.values())
+
 
         all_enemies_dead = len(self.enemies) == 0
         if all_enemies_dead:
             reward += 200
+            # PRD code
+            indiv_rewards = [r+200 for r in indiv_rewards]
+
         done = all_enemies_dead or len(self.agents) == 0
         reward /= self.max_reward / 20  # Scale reward between 0 and 20
 
-        indiv_rewards = []
-        for i in range(len(actions)):
-            if i in self.agents:
-                agent = self.agents[i]
-                if agent.max_shield != 0:
-                    shield_rew = (agent.shield / agent.max_shield) * 0.05
-                else:
-                    shield_rew = 0
-                if agent.max_hp != 0:
-                    hp_rew = (agent.hp / agent.max_hp) * 0.05
-                else:
-                    hp_rew = 0
-                if agent.max_energy != 0:
-                    energy_rew = (agent.energy / agent.max_energy) * 0.05
-                else:
-                    energy_rew = 0
-                # print(shield_rew, hp_rew, energy_rew)
-                indiv_rewards.append(reward + shield_rew + hp_rew + energy_rew)
-            else:
-                indiv_rewards.append(0)
+        # PRD CODE
+        indiv_rewards = [r/(self.max_reward/20) for r in indiv_rewards]
+
+        # indiv_rewards = []
+        # for i in range(len(actions)):
+        #     if i in self.agents:
+        #         agent = self.agents[i]
+        #         if agent.max_shield != 0:
+        #             shield_rew = (agent.shield / agent.max_shield) * 0.05
+        #         else:
+        #             shield_rew = 0
+        #         if agent.max_hp != 0:
+        #             hp_rew = (agent.hp / agent.max_hp) * 0.05
+        #         else:
+        #             hp_rew = 0
+        #         if agent.max_energy != 0:
+        #             energy_rew = (agent.energy / agent.max_energy) * 0.05
+        #         else:
+        #             energy_rew = 0
+        #         # print(shield_rew, hp_rew, energy_rew)
+        #         indiv_rewards.append(reward + shield_rew + hp_rew + energy_rew)
+        #     else:
+        #         indiv_rewards.append(0)
 
         info = self.__get_info()
         info["indiv_rewards"] = indiv_rewards
@@ -323,16 +347,28 @@ class SMACliteEnv(gym.Env):
 
         shuffled_units = list(self.all_units.values())
         np.random.shuffle(shuffled_units)
-        reward = sum(unit.game_step(
-            neighbour_finder=self.__get_targeter_neighbour_finder(unit),
-            max_radius=self.max_unit_radius
-            ) for unit in shuffled_units)
+        # reward = sum(unit.game_step(
+        #     neighbour_finder=self.__get_targeter_neighbour_finder(unit),
+        #     max_radius=self.max_unit_radius
+        #     ) for unit in shuffled_units)
+
+        # PRD CODE
+        dict_ = {}
+        for unit in shuffled_units:
+            dict_[unit.id] = unit.game_step(
+                    neighbour_finder=self.__get_targeter_neighbour_finder(unit),
+                    max_radius=self.max_unit_radius
+                    )
+            # if dict_[unit.id] > 0:
+            #     print(unit.id, dict_[unit.id])
+        reward = sum(list(dict_.values()))
+        
         self.__update_deaths()
         self.neighbour_finder_all.update()
         self.neighbour_finder_ally.update()
         self.neighbour_finder_enemy.update()
 
-        return reward
+        return reward, dict_
 
     def __get_unit_state_features(self, unit: Unit, ally: bool):
         lgt = self.ally_state_feat_size if ally else self.enemy_state_feat_size
