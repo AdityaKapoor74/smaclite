@@ -206,6 +206,7 @@ class SMACliteEnv(gym.Env):
         # PRD CODE
         indiv_rewards = [r/(self.max_reward/20) for r in indiv_rewards]
 
+        # HEALTH BASED REWARD --> I think this made the agents greedy
         # indiv_rewards = []
         # for i in range(len(actions)):
         #     if i in self.agents:
@@ -256,21 +257,27 @@ class SMACliteEnv(gym.Env):
 
     def get_state(self):
         state = np.zeros(self.state_size, dtype=np.float32)
+        # PRD
+        ally_states = np.zeros((self.n_agents, self.ally_state_feat_size), dtype=np.float32)
+        enemy_states = np.zeros((self.n_enemies, self.enemy_state_feat_size), dtype=np.float32)
+       
         for unit in self.agents.values():
             base = unit.id_in_faction * self.ally_state_feat_size
             ally_feats = self.__get_unit_state_features(unit, True)
+            ally_states[unit.id_in_faction] = ally_feats
             state[base:base + self.ally_state_feat_size] = ally_feats
         base_offset = self.n_agents * self.ally_state_feat_size
         for enemy in self.enemies.values():
             base = base_offset + enemy.id_in_faction \
                 * self.enemy_state_feat_size
             enemy_feats = self.__get_unit_state_features(enemy, False)
+            enemy_states[enemy.id_in_faction] = enemy_feats
             state[base:base + self.enemy_state_feat_size] = enemy_feats
         base_offset += self.n_enemies * self.enemy_state_feat_size
         state[base_offset:base_offset + self.n_agents * self.n_actions] \
             = self.last_actions
 
-        return np.array(state)
+        return np.array(state), np.array(ally_states), np.array(enemy_states)
 
     def __get_targeter_neighbour_finder(self, unit: Unit):
         is_ally = unit.faction == Faction.ALLY
@@ -450,8 +457,12 @@ class SMACliteEnv(gym.Env):
         return tuple(obs)
 
     def __get_info(self):
+        state, ally_state, enemy_state = self.get_state()
         return {'avail_actions': self.get_avail_actions(),
-                'state': self.get_state()}
+                'state': state, 
+                'ally_states': ally_state,
+                'enemy_states': enemy_state
+                }
 
     def __can_target(self, unit: Unit, target: Unit, distance=None):
         if target.hp == 0 or unit.hp == 0:
