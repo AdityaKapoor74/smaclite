@@ -200,7 +200,14 @@ class SMACliteEnv(gym.Env):
             # PRD code
             indiv_rewards = [r+200 for r in indiv_rewards]
 
-        done = all_enemies_dead or len(self.agents) == 0
+        # print(self.agents.keys())
+        done = []
+        for i in range(self.n_agents):
+            if i in self.agents.keys():
+                done.append(0)
+            else:
+                done.append(1)
+        # done = all_enemies_dead or len(self.agents) == 0
         reward /= self.max_reward / 20  # Scale reward between 0 and 20
 
         # PRD CODE
