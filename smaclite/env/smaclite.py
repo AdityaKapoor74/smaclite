@@ -195,7 +195,6 @@ class SMACliteEnv(gym.Env):
 
 
         all_enemies_dead = len(self.enemies) == 0
-        all_enemies_dead = True
         if all_enemies_dead:
             reward += 200
             # PRD code
