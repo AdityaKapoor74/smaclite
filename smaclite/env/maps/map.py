@@ -87,6 +87,7 @@ class MapPreset(Enum):
     def map_info(self) -> MapInfo:
         return self.value
 
+    MAP_5M_VS_6M = get_standard_map('5m_vs_6m')
     MAP_10M_VS_11M = get_standard_map('10m_vs_11m')
     MAP_27M_VS_30M = get_standard_map('27m_vs_30m')
     MAP_3S5Z_VS_3S6Z = get_standard_map('3s5z_vs_3s6z')
