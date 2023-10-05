@@ -53,7 +53,7 @@ class SMACliteEnv(gym.Env):
                 be used. Defaults to False.
 
         """
-
+        # self.counter = 0
         if seed is not None:
             self.seed(seed)
         if map_info is None and map_file is None:
@@ -155,6 +155,8 @@ class SMACliteEnv(gym.Env):
             + sum(enemy.hp + enemy.shield
                   for enemy in self.enemies.values())
 
+        self.agent_ids = [unit.id for unit in self.agents.values()]
+
         self.__enemy_attack()
         obs = self.__get_obs()
         if return_info:
@@ -175,6 +177,7 @@ class SMACliteEnv(gym.Env):
             if not avail_actions[i][action]:
                 raise ValueError(f"Invalid action for agent {i}: {action}")
             agent.command = self.__get_command(agent, action)
+
         # reward = sum(self.__world_step() for _ in range(STEP_MUL))
 
         # PRD CODE
@@ -189,57 +192,47 @@ class SMACliteEnv(gym.Env):
                 if d_key in indiv_rewards:
                     indiv_rewards[d_key] += d_value
         
-        # print(self.agents.keys())
-        # print(sum(indiv_rewards.values()) == reward)
         indiv_rewards = list(indiv_rewards.values())
 
-
         all_enemies_dead = len(self.enemies) == 0
+
+        # if self.counter == 24:
+        #     all_enemies_dead = True
+        #     self.counter = 0
+
+        # self.counter += 1
+
         if all_enemies_dead:
             reward += 200
             # PRD code
-            indiv_rewards = [r+200 for r in indiv_rewards]
+            for i, r in enumerate(indiv_rewards):
+                if i in self.agents:
+                    indiv_rewards[i] += 200/self.n_agents
+
+            # indiv_rewards = [r+200/self.n_agents for r in indiv_rewards]
 
         # print(self.agents.keys())
         if all_enemies_dead:
-            done = [1]*self.n_agents
+            indiv_dones = [1]*self.n_agents
         else:
-            done = []
+            indiv_dones = []
             for i in range(self.n_agents):
                 if i in self.agents.keys():
-                    done.append(0)
+                    indiv_dones.append(0)
                 else:
-                    done.append(1)
-        # done = all_enemies_dead or len(self.agents) == 0
+                    indiv_dones.append(1)
+        
+        done = all_enemies_dead or len(self.agents) == 0
+        # print(reward, len(self.enemies))
+
         reward /= self.max_reward / 20  # Scale reward between 0 and 20
 
         # PRD CODE
-        indiv_rewards = [r/(self.max_reward/20) for r in indiv_rewards]
-
-        # HEALTH BASED REWARD --> I think this made the agents greedy
-        # indiv_rewards = []
-        # for i in range(len(actions)):
-        #     if i in self.agents:
-        #         agent = self.agents[i]
-        #         if agent.max_shield != 0:
-        #             shield_rew = (agent.shield / agent.max_shield) * 0.05
-        #         else:
-        #             shield_rew = 0
-        #         if agent.max_hp != 0:
-        #             hp_rew = (agent.hp / agent.max_hp) * 0.05
-        #         else:
-        #             hp_rew = 0
-        #         if agent.max_energy != 0:
-        #             energy_rew = (agent.energy / agent.max_energy) * 0.05
-        #         else:
-        #             energy_rew = 0
-        #         # print(shield_rew, hp_rew, energy_rew)
-        #         indiv_rewards.append(reward + shield_rew + hp_rew + energy_rew)
-        #     else:
-        #         indiv_rewards.append(0)
+        indiv_rewards = [r/(self.max_reward/(20*self.n_agents)) for r in indiv_rewards]
 
         info = self.__get_info()
         info["indiv_rewards"] = indiv_rewards
+        info["indiv_dones"] = indiv_dones
         info["num_enemies"] = len(self.enemies)
         info["num_allies"] = len(self.agents)
         info["all_enemies_dead"] = int(all_enemies_dead)
@@ -376,8 +369,10 @@ class SMACliteEnv(gym.Env):
                     neighbour_finder=self.__get_targeter_neighbour_finder(unit),
                     max_radius=self.max_unit_radius
                     )
-            # if dict_[unit.id] > 0:
-            #     print(unit.id, dict_[unit.id])
+            if unit.id in self.agent_ids and unit.target is not None:
+                if unit.target.hp == 0:
+                    dict_[unit.id] += REWARD_KILL
+
         reward = sum(list(dict_.values()))
         
         self.__update_deaths()
