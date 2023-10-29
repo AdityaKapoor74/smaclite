@@ -373,9 +373,9 @@ class SMACliteEnv(gym.Env):
                     neighbour_finder=self.__get_targeter_neighbour_finder(unit),
                     max_radius=self.max_unit_radius
                     )
-            if unit.id in self.agent_ids and unit.target is not None:
-                if unit.target.hp == 0:
-                    dict_[unit.id] += REWARD_KILL
+            # if unit.id in self.agent_ids and unit.target is not None:
+            #     if unit.target.hp == 0:
+            #         dict_[unit.id] += REWARD_KILL
 
         reward = sum(list(dict_.values()))
         
