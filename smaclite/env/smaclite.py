@@ -140,6 +140,7 @@ class SMACliteEnv(gym.Env):
 
     def reset(self, seed=None, return_info=False, options=None) \
             -> Tuple[np.ndarray, dict]:
+        # self.counter = 0
         self.agents = {}
         self.enemies = {}
         self.all_units = {}
@@ -200,11 +201,12 @@ class SMACliteEnv(gym.Env):
 
         all_enemies_dead = len(self.enemies) == 0
 
-        # if self.counter == 24:
+        # if self.counter == 25:
+        #     print(self.counter)
         #     all_enemies_dead = True
         #     self.counter = 0
-
-        # self.counter += 1
+        # else:
+        #     self.counter += 1
 
         if all_enemies_dead:
             reward += REWARD_WIN
@@ -232,7 +234,7 @@ class SMACliteEnv(gym.Env):
         reward /= self.max_reward / 20  # Scale reward between 0 and 20
 
         # PRD CODE
-        indiv_rewards = [r/(self.max_indiv_reward/20) for r in indiv_rewards]
+        indiv_rewards = [r/(self.max_reward/20) for r in indiv_rewards]
 
         info = self.__get_info()
         info["indiv_rewards"] = indiv_rewards
