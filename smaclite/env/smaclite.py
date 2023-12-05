@@ -156,9 +156,9 @@ class SMACliteEnv(gym.Env):
             + sum(enemy.hp + enemy.shield
                   for enemy in self.enemies.values())
 
-        self.max_indiv_reward = self.n_enemies * REWARD_KILL \
-            + sum(enemy.hp + enemy.shield
-                  for enemy in self.enemies.values()) #+ REWARD_WIN/self.n_agents
+        self.max_indiv_reward = (self.n_enemies * REWARD_KILL \
+                    + sum(enemy.hp + enemy.shield
+                          for enemy in self.enemies.values())) / self.n_agents #+ REWARD_WIN/self.n_agents
 
         self.agent_ids = [unit.id for unit in self.agents.values()]
 
