@@ -156,9 +156,9 @@ class SMACliteEnv(gym.Env):
             + sum(enemy.hp + enemy.shield
                   for enemy in self.enemies.values())
 
-        self.max_indiv_reward = self.n_enemies * REWARD_KILL + REWARD_WIN/self.n_agents \
+        self.max_indiv_reward = self.n_enemies * REWARD_KILL \
             + sum(enemy.hp + enemy.shield
-                  for enemy in self.enemies.values())
+                  for enemy in self.enemies.values()) #+ REWARD_WIN/self.n_agents
 
         self.agent_ids = [unit.id for unit in self.agents.values()]
 
@@ -211,13 +211,12 @@ class SMACliteEnv(gym.Env):
         if all_enemies_dead:
             reward += REWARD_WIN
             # PRD code
-            for i, r in enumerate(indiv_rewards):
-                if i in self.agents:
-                    indiv_rewards[i] += REWARD_WIN/self.n_agents
+            # for i in range(len(indiv_rewards)):
+            #     if i in self.agents:
+            #         indiv_rewards[i] += (REWARD_WIN/self.n_agents)
 
             # indiv_rewards = [r+200/self.n_agents for r in indiv_rewards]
 
-        # print(self.agents.keys())
         if all_enemies_dead:
             indiv_dones = [1]*self.n_agents
         else:
@@ -234,7 +233,7 @@ class SMACliteEnv(gym.Env):
         reward /= self.max_reward / 20  # Scale reward between 0 and 20
 
         # PRD CODE
-        indiv_rewards = [r/(self.max_reward/20) for r in indiv_rewards]
+        indiv_rewards = [r/(self.max_indiv_reward/20) for r in indiv_rewards]
 
         info = self.__get_info()
         info["indiv_rewards"] = indiv_rewards
