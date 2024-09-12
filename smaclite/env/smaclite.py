@@ -2,6 +2,8 @@ from typing import Dict, List, Tuple
 
 import gym
 import numpy as np
+import math
+import random
 
 from smaclite.env.maps.map import Group, MapInfo
 from smaclite.env.rvo2.neighbour_finder import NeighbourFinder
@@ -25,6 +27,7 @@ MOVE_AMOUNT = 2
 STEP_MUL = 8
 REWARD_WIN = 200
 REWARD_KILL = 10
+REWARD_COOPERATE = 5
 
 
 class SMACliteEnv(gym.Env):
@@ -55,7 +58,7 @@ class SMACliteEnv(gym.Env):
         """
         # self.counter = 0
         if seed is not None:
-            self.seed(seed)
+            random.seed(seed)
         if map_info is None and map_file is None:
             raise ValueError("Either map_info or map_file must be provided.")
         if map_file is not None:
@@ -158,9 +161,24 @@ class SMACliteEnv(gym.Env):
 
         self.max_indiv_reward = (self.n_enemies * REWARD_KILL \
                     + sum(enemy.hp + enemy.shield
-                          for enemy in self.enemies.values())) / self.n_agents #+ REWARD_WIN/self.n_agents
+                          for enemy in self.enemies.values())) + REWARD_WIN/self.n_agents
 
         self.agent_ids = [unit.id for unit in self.agents.values()]
+        self.enemy_ids = [unit.id for unit in self.enemies.values()]
+
+        # longest time for which agents recieve cooperate reward --> 2 agents with least damage value trying to kill each individual enemy
+        self.agent_damage_capacity = sorted([unit.damage for unit in self.agents.values()])
+        min_damage_capacity_1, min_damage_capacity_2 = self.agent_damage_capacity[0], self.agent_damage_capacity[1]
+        # incorporate REWARD_COOPERATE for normalization
+        # total_damage_ally_units_can_inflict = sum(self.agent_damage_capacity) # total damage the ally team can do in a single timestep
+        # calculate number of timesteps needed to kill every individual enemy unit with 2 ally agents with least hit damage
+        num_timesteps_to_kill_enemy_team = sum(math.ceil((enemy.hp + enemy.shield)/(min_damage_capacity_1+min_damage_capacity_2)) for enemy in self.enemies.values()) # timesteps needed to kill enemy team
+        
+        # assuming all agents are cooperating with some other ally then the max cooperation reward for an episode would be
+        # max_cooperation_reward = REWARD_COOPERATE*num_timesteps_to_kill_enemy_team
+
+        # self.max_reward += max_cooperation_reward
+        # self.max_indiv_reward += max_cooperation_reward
 
         self.__enemy_attack()
         obs = self.__get_obs()
@@ -170,7 +188,7 @@ class SMACliteEnv(gym.Env):
 
     def step(self, actions):
         assert len(actions) == self.n_agents
-        assert all(type(action) == int for action in actions)
+        assert (all(type(action) == int for action in actions) or all(type(action) == np.int64 for action in actions) or all(type(action) == np.int32 for action in actions))
         self.last_actions = np.eye(self.n_actions)[np.array(actions)] \
             .flatten()
         avail_actions = self.get_avail_actions()
@@ -186,18 +204,23 @@ class SMACliteEnv(gym.Env):
         # reward = sum(self.__world_step() for _ in range(STEP_MUL))
 
         # PRD CODE
-        reward = 0
+        # reward = 0
         indiv_rewards = {}
         for i in range(self.n_agents):
             indiv_rewards[i] = 0
+
         for _ in range(STEP_MUL):
-            r, d = self.__world_step()
-            reward += r
-            for d_key, d_value in d.items():
+            # r, d = self.__world_step()
+            # enemy units have finegrain control since their actions vary within STEP_MUL but that's not the case for allies
+            indiv_agent_reward_dict, enemy_attack_ids = self.__world_step()
+            # reward += r
+            for d_key, d_value in indiv_agent_reward_dict.items():
                 if d_key in indiv_rewards:
                     indiv_rewards[d_key] += d_value
         
         indiv_rewards = list(indiv_rewards.values())
+
+        reward = sum(indiv_rewards)
 
         all_enemies_dead = len(self.enemies) == 0
 
@@ -211,9 +234,9 @@ class SMACliteEnv(gym.Env):
         if all_enemies_dead:
             reward += REWARD_WIN
             # PRD code
-            # for i in range(len(indiv_rewards)):
-            #     if i in self.agents:
-            #         indiv_rewards[i] += (REWARD_WIN/self.n_agents)
+            for i in range(len(indiv_rewards)):
+                if i in self.agents:
+                    indiv_rewards[i] += (REWARD_WIN/self.n_agents)
 
             # indiv_rewards = [r+200/self.n_agents for r in indiv_rewards]
 
@@ -230,10 +253,12 @@ class SMACliteEnv(gym.Env):
         done = all_enemies_dead or len(self.agents) == 0
         # print(reward, len(self.enemies))
 
-        reward /= self.max_reward / 20  # Scale reward between 0 and 20
+        # reward /= self.max_reward / 20  # Scale reward between 0 and 20
 
-        # PRD CODE
-        indiv_rewards = [r/(self.max_indiv_reward/20) for r in indiv_rewards]
+        # SCALE REWARDS
+        reward = reward/(self.max_reward/20) # Scale reward between 0 and 20
+
+        indiv_rewards = [r/(self.max_indiv_reward/(20/self.n_agents)) for r in indiv_rewards]
 
         info = self.__get_info()
         info["indiv_rewards"] = indiv_rewards
@@ -242,6 +267,7 @@ class SMACliteEnv(gym.Env):
         info["num_allies"] = len(self.agents)
         info["all_enemies_dead"] = int(all_enemies_dead)
         info["all_allies_dead"] = int(len(self.agents) == 0)
+        info["enemy_action_list"] = enemy_attack_ids
 
         return self.__get_obs(), reward, done, info
 
@@ -368,24 +394,60 @@ class SMACliteEnv(gym.Env):
         #     ) for unit in shuffled_units)
 
         # PRD CODE
-        dict_ = {}
+        # init dict for storing individual agents rewards
+        indiv_agent_reward_dict = {}
+
+        # init dict for storing ally ids attacking same enemy unit
+        ally_attacking_same_unit = {}
+        for enemy_id in self.enemy_ids:
+            ally_attacking_same_unit[enemy_id] = []
+
+        # record enemy attack ids 
+        enemy_attack_ids = []
+
         for unit in shuffled_units:
-            dict_[unit.id] = unit.game_step(
+            indiv_agent_reward_dict[unit.id] = unit.game_step(
                     neighbour_finder=self.__get_targeter_neighbour_finder(unit),
                     max_radius=self.max_unit_radius
                     )
+
+            if unit.id in self.enemy_ids and unit.target is not None:
+                # print("Enemy Unit ID", unit.id, "Target Ally Unit", unit.target.id)
+                enemy_attack_ids.append(-unit.target.id) # making the number negative for easier interpretation
+            elif unit.id in self.enemy_ids and isinstance(unit.command, AttackMoveCommand):
+                # print("Enemy Unit ID", unit.id, "Movement", unit.command.pos, unit.pos)
+                enemy_attack_ids.append(5)
+            elif unit.id in self.enemy_ids and isinstance(unit.command, StopCommand):
+                # print("Enemy Unit ID", unit.id, "StopCommand")
+                enemy_attack_ids.append(1)
+            elif unit.id in self.enemy_ids and isinstance(unit.command, NoopCommand):
+                # print("Enemy Unit ID", unit.id, "NoopCommand")
+                enemy_attack_ids.append(0)
+
             # if unit.id in self.agent_ids and unit.target is not None:
             #     if unit.target.hp == 0:
-            #         dict_[unit.id] += REWARD_KILL
+            #         indiv_agent_reward_dict[unit.id] += REWARD_KILL
+            if unit.id in self.agent_ids and unit.target is not None:
+                ally_attacking_same_unit[unit.target.id].append(unit.id)
 
-        reward = sum(list(dict_.values()))
+        # print("ALLY ATTACK SAME UNIT")
+        # print(ally_attacking_same_unit)
         
+        # give extra points to units that have attacked the same enemy
+        # for enemy_id in self.enemy_ids:
+        #     if len(ally_attacking_same_unit[enemy_id]) > 1:
+        #         for agent_id in ally_attacking_same_unit[enemy_id]:
+        #             indiv_agent_reward_dict[agent_id] += REWARD_COOPERATE
+
+        # reward = sum(list(indiv_agent_reward_dict.values()))
+
         self.__update_deaths()
         self.neighbour_finder_all.update()
         self.neighbour_finder_ally.update()
         self.neighbour_finder_enemy.update()
 
-        return reward, dict_
+        # return reward, indiv_agent_reward_dict
+        return indiv_agent_reward_dict, enemy_attack_ids
 
     def __get_unit_state_features(self, unit: Unit, ally: bool):
         lgt = self.ally_state_feat_size if ally else self.enemy_state_feat_size
@@ -642,6 +704,12 @@ class SMACliteEnv(gym.Env):
             return NoopCommand()
         if action == 1:
             return StopCommand()
+        '''
+        2 - up
+        3 - down
+        4 - right
+        5 - left
+        '''
         if 2 <= action <= 5:
             dpos = Direction(action - 2).dx_dy * MOVE_AMOUNT
             return MoveCommand(unit.pos + dpos)
