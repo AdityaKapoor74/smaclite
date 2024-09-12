@@ -267,7 +267,6 @@ class SMACliteEnv(gym.Env):
         info["num_allies"] = len(self.agents)
         info["all_enemies_dead"] = int(all_enemies_dead)
         info["all_allies_dead"] = int(len(self.agents) == 0)
-        print("enemy_attack_ids", enemy_attack_ids)
         info["enemy_action_list"] = enemy_attack_ids
 
         return self.__get_obs(), reward, done, info
