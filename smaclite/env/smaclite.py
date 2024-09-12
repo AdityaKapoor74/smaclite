@@ -3,6 +3,7 @@ from typing import Dict, List, Tuple
 import gym
 import numpy as np
 import math
+import random
 
 from smaclite.env.maps.map import Group, MapInfo
 from smaclite.env.rvo2.neighbour_finder import NeighbourFinder
@@ -57,7 +58,7 @@ class SMACliteEnv(gym.Env):
         """
         # self.counter = 0
         if seed is not None:
-            self.seed(seed)
+            random.seed(seed)
         if map_info is None and map_file is None:
             raise ValueError("Either map_info or map_file must be provided.")
         if map_file is not None:
@@ -187,7 +188,7 @@ class SMACliteEnv(gym.Env):
 
     def step(self, actions):
         assert len(actions) == self.n_agents
-        assert all(type(action) == int for action in actions)
+        assert (all(type(action) == int for action in actions) or all(type(action) == np.int64 for action in actions) or all(type(action) == np.int32 for action in actions))
         self.last_actions = np.eye(self.n_actions)[np.array(actions)] \
             .flatten()
         avail_actions = self.get_avail_actions()
@@ -266,6 +267,7 @@ class SMACliteEnv(gym.Env):
         info["num_allies"] = len(self.agents)
         info["all_enemies_dead"] = int(all_enemies_dead)
         info["all_allies_dead"] = int(len(self.agents) == 0)
+        print("enemy_attack_ids", enemy_attack_ids)
         info["enemy_action_list"] = enemy_attack_ids
 
         return self.__get_obs(), reward, done, info
@@ -423,11 +425,15 @@ class SMACliteEnv(gym.Env):
                 # print("Enemy Unit ID", unit.id, "NoopCommand")
                 enemy_attack_ids.append(0)
 
+
             # if unit.id in self.agent_ids and unit.target is not None:
             #     if unit.target.hp == 0:
             #         indiv_agent_reward_dict[unit.id] += REWARD_KILL
             if unit.id in self.agent_ids and unit.target is not None:
                 ally_attacking_same_unit[unit.target.id].append(unit.id)
+
+        if len(enemy_attack_ids) != len(self.enemy_ids):
+            enemy_attack_ids.extend([None]*(len(self.enemy_ids)-len(enemy_attack_ids)))
 
         # print("ALLY ATTACK SAME UNIT")
         # print(ally_attacking_same_unit)
