@@ -267,6 +267,7 @@ class SMACliteEnv(gym.Env):
         info["num_allies"] = len(self.agents)
         info["all_enemies_dead"] = int(all_enemies_dead)
         info["all_allies_dead"] = int(len(self.agents) == 0)
+        print("enemy_attack_ids", enemy_attack_ids)
         info["enemy_action_list"] = enemy_attack_ids
 
         return self.__get_obs(), reward, done, info
@@ -424,11 +425,15 @@ class SMACliteEnv(gym.Env):
                 # print("Enemy Unit ID", unit.id, "NoopCommand")
                 enemy_attack_ids.append(0)
 
+
             # if unit.id in self.agent_ids and unit.target is not None:
             #     if unit.target.hp == 0:
             #         indiv_agent_reward_dict[unit.id] += REWARD_KILL
             if unit.id in self.agent_ids and unit.target is not None:
                 ally_attacking_same_unit[unit.target.id].append(unit.id)
+
+        if len(enemy_attack_ids) != len(self.enemy_ids):
+            enemy_attack_ids.extend([None]*(len(self.enemy_ids)-len(enemy_attack_ids)))
 
         # print("ALLY ATTACK SAME UNIT")
         # print(ally_attacking_same_unit)
